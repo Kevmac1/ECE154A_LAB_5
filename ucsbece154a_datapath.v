@@ -65,20 +65,76 @@ always @(posedge clk) begin
 end
 
 // **PUT THE REST OF YOUR CODE HERE**
-
+// Register File
 ucsbece154a_rf rf (
-    /*FILL*/
+    .clk(clk),
+    .reset(reset),
+    .we3(RegWrite_i),
+    .a1(a1),
+    .a2(a2),
+    .a3(a3),
+    .wd3(Result),
+    .rd1(rd1),
+    .rd2(rd2)
 );
 
+// ALU
 ucsbece154a_alu alu (
-    /*FILL*/
+    .A(ALUInputA),
+    .B(ALUInputB),
+    .ALUControl(ALUControl_i),
+    .Result(ALUResult),
+    .Zero(zero_o)
 );
 
-// Extend unit block
-   /* FILL */
+// Extend unit
+ucsbece154a_extender ext (
+    .Instr(Instr[31:7]),
+    .ImmSrc(ImmSrc_i),
+    .ImmExt(ImmExt)
+);
 
-// Muxes
-   /* FILL */
- 
+// Mux for ALU input A
+reg [31:0] ALUInputA;
+always @(*) begin
+    case (ALUSrcA_i)
+        2'b00: ALUInputA = PC;
+        2'b01: ALUInputA = OldPC;
+        2'b10: ALUInputA = A;
+        default: ALUInputA = 32'bx;
+    endcase
+end
+
+// Mux for ALU input B
+reg [31:0] ALUInputB;
+always @(*) begin
+    case (ALUSrcB_i)
+        2'b00: ALUInputB = B;
+        2'b01: ALUInputB = 32'd4;     // For PC increment
+        2'b10: ALUInputB = ImmExt;    // Immediate value
+        default: ALUInputB = 32'bx;
+    endcase
+end
+
+// Mux for Address source
+assign Adr_o = (AdrSrc_i) ? PC : ALUout;
+
+// Mux for WriteData_o (Data to be written to memory)
+assign WriteData_o = B;
+
+// Mux for selecting the Result (write-back to register file)
+always @(*) begin
+    case (ResultSrc_i)
+        2'b00: Result = ALUout;     // ALU result
+        2'b01: Result = Data;       // Memory read data
+        2'b10: Result = PC + 32'd4; // PC + 4 (for JAL)
+        default: Result = 32'bx;
+    endcase
+end
+
+// Instruction fields for control unit
+assign op_o = Instr[6:0];
+assign funct3_o = Instr[14:12];
+assign funct7_o = Instr[30];
 
 endmodule
