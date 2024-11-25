@@ -124,22 +124,22 @@ assign {
 } = controls_next;
 
 always @ * begin
-    case (state_next)
-        state_Fetch:     controls_next = 14'b1_0_0_1_0_00_01_0_00_00;      
-        state_Decode:    controls_next = 14'b0_0_0_0_0_00_00_0_00_00; 
-        state_MemAdr:    controls_next = 14'b0_0_0_0_0_00_10_1_00_00; 
-        state_MemRead:   controls_next = 14'b0_0_0_0_0_00_10_1_01_00;  
-        state_MemWB:     controls_next = 14'b0_0_0_0_1_00_00_0_00_00; 
-        state_MemWrite:  controls_next = 14'b0_0_1_0_0_00_10_1_00_00; 
-        state_ExecuteR:  controls_next = 14'b0_0_0_0_0_10_00_0_00_10; 
-        state_ALUWB:     controls_next = 14'b0_0_0_0_1_00_00_0_00_00;     
-        state_ExecuteI:  controls_next = 14'b0_0_0_0_0_10_00_0_00_11;   
-        state_JAL:       controls_next = 14'b1_0_0_0_1_00_00_0_10_00; 
-        state_BEQ:       controls_next = 14'b0_1_0_0_0_01_00_0_00_01; 
-        state_LUI:       controls_next = 14'b0_0_0_0_1_00_00_0_11_00; 
+   case (state_next)
+        state_Fetch:     controls_next = 14'b1_0_1_1_0_00_00_0_00_00;  // Set control signals for Fetch state
+        state_Decode:    controls_next = 14'b0_0_1_1_1_01_01_1_00_00;  // Set for Decode state (example)
+        state_MemAdr:    controls_next = 14'b0_0_0_0_0_00_01_1_00_00;  // For MemAdr state (example)
+        state_MemRead:   controls_next = 14'b0_1_0_1_1_00_01_1_00_00;  // Set for MemRead state
+        state_MemWrite:  controls_next = 14'b0_1_1_1_0_00_01_0_00_00;  // For MemWrite state (example)
+        state_ExecuteR:  controls_next = 14'b0_0_0_1_1_01_00_0_00_00;  // Set for ExecuteR (R-type)
+        state_ALUWB:     controls_next = 14'b1_0_0_1_0_00_00_1_00_00;  // For ALUWB (example)
+        state_ExecuteI:  controls_next = 14'b0_1_1_1_1_01_00_0_00_00;  // For ExecuteI (I-type)
+        state_JAL:       controls_next = 14'b1_0_0_1_1_10_00_0_00_00;  // JAL operation
+        state_BEQ:       controls_next = 14'b0_1_0_1_1_00_01_0_01_00;  // BEQ operation
+        state_LUI:       controls_next = 14'b1_0_1_1_1_00_00_1_00_00;  // LUI operation
         default:         controls_next = 14'bx_x_x_x_x_xx_xx_x_xx_xx;
-    endcase
+   endcase
 end
+
 
 // *******  Updating control and main FSM FFs  ********
 always @(posedge clk) begin
