@@ -4,7 +4,7 @@
 // Distribution Prohibited
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// TO DO: Add mising code below  
+// TO DO: Add missing code below  
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 module ucsbece154a_datapath (
@@ -30,20 +30,17 @@ module ucsbece154a_datapath (
 `include "ucsbece154a_defines.vh"
 
 // Internal registers
-
 reg [31:0] PC, OldPC, Instr, Data, A, B, ALUout;
+reg [31:0] Result;
 
 // Buses connected to internal registers
-reg [31:0] Result;
 wire [4:0] a1 = Instr[19:15];
 wire [4:0] a2 = Instr[24:20];
 wire [4:0] a3 = Instr[11:7];
 wire [31:0] rd1, rd2;
 wire [31:0] ALUResult;
 
-
-// Update for all internal registers
-
+// Fetch Instruction
 always @(posedge clk) begin
     if (reset) begin
         PC <= pc_start;
@@ -64,77 +61,73 @@ always @(posedge clk) begin
     end
 end
 
-// **PUT THE REST OF YOUR CODE HERE**
 // Register File
 ucsbece154a_rf rf (
     .clk(clk),
     .reset(reset),
-    .we3(RegWrite_i),
+    .RegWrite_i(RegWrite_i),
     .a1(a1),
     .a2(a2),
     .a3(a3),
-    .wd3(Result),
+    .wd(WriteData_o),
     .rd1(rd1),
     .rd2(rd2)
 );
 
 // ALU
 ucsbece154a_alu alu (
-    .A(ALUInputA),
-    .B(ALUInputB),
+    .A(A),
+    .B(B),
     .ALUControl(ALUControl_i),
-    .Result(ALUResult),
-    .Zero(zero_o)
+    .ALUResult(ALUResult),
+    .zero(zero_o)
 );
 
-// Extend unit
-ucsbece154a_extender ext (
-    .Instr(Instr[31:7]),
+// Extend Unit
+ucsbece154a_extender extender (
+    .Instr(Instr),
     .ImmSrc(ImmSrc_i),
-    .ImmExt(ImmExt)
+    .ImmResult(WriteData_o)
 );
 
-// Mux for ALU input A
-reg [31:0] ALUInputA;
+// MUXes
+// Mux for ALU Src A
 always @(*) begin
     case (ALUSrcA_i)
-        2'b00: ALUInputA = PC;
-        2'b01: ALUInputA = OldPC;
-        2'b10: ALUInputA = A;
-        default: ALUInputA = 32'bx;
+        2'b00: Result = A;            // A
+        2'b01: Result = OldPC;       // OldPC
+        2'b10: Result = 32'b0;       // Zero
+        default: Result = 32'bx;     // Undefined
     endcase
 end
 
-// Mux for ALU input B
-reg [31:0] ALUInputB;
+// Mux for ALU Src B
 always @(*) begin
     case (ALUSrcB_i)
-        2'b00: ALUInputB = B;
-        2'b01: ALUInputB = 32'd4;     // For PC increment
-        2'b10: ALUInputB = ImmExt;    // Immediate value
-        default: ALUInputB = 32'bx;
+        2'b00: WriteData_o = B;      // B
+        2'b01: WriteData_o = ImmResult; // ImmExt
+        2'b10: WriteData_o = 32'b0;  // Zero
+        default: WriteData_o = 32'bx; // Undefined
     endcase
 end
 
-// Mux for Address source
-assign Adr_o = (AdrSrc_i) ? PC : ALUout;
-
-// Mux for WriteData_o (Data to be written to memory)
-assign WriteData_o = B;
-
-// Mux for selecting the Result (write-back to register file)
+// Mux for ResultSrc
 always @(*) begin
     case (ResultSrc_i)
-        2'b00: Result = ALUout;     // ALU result
-        2'b01: Result = Data;       // Memory read data
-        2'b10: Result = PC + 32'd4; // PC + 4 (for JAL)
-        default: Result = 32'bx;
+        2'b00: WriteData_o = ALUout;       // ALU result
+        2'b01: WriteData_o = ReadData_i;   // Memory read
+        2'b10: WriteData_o = OldPC + 4;    // PC + 4 (for JAL)
+        default: WriteData_o = 32'bx;       // Undefined
     endcase
 end
 
-// Instruction fields for control unit
+// Address Source Mux
+assign Adr_o = AdrSrc_i ? ALUout : OldPC + 4;
+
+// Output for op and funct3, funct7 fields
 assign op_o = Instr[6:0];
 assign funct3_o = Instr[14:12];
-assign funct7_o = Instr[30];
+assign funct7_o = Instr[31];
 
+// End of module
 endmodule
