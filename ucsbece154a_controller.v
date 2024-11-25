@@ -1,6 +1,12 @@
 module ucsbece154a_controller (
     input               clk, reset,
     input               zero_i,
+    input wire [5:0] opcode,
+    output reg MemWrite_o,
+    output reg MemRead_o,
+    output reg RegWrite_o,
+    output reg ALUSrcA_o,
+    output reg ALUSrcB_o
     input         [6:0] opcode_i,
     input         [2:0] funct3_i,
     input         [6:0] funct7_i,
@@ -14,7 +20,32 @@ module ucsbece154a_controller (
     output reg [2:0]    ALUControl_o,         // ALU control signal
     output reg [2:0]    ImmSrc_o              // Immediate source selection
 );
+ always @(*) begin
+        // Default values
+        MemWrite_o = 0;
+        MemRead_o = 0;
+        RegWrite_o = 0;
+        ALUSrcA_o = 0;
+        ALUSrcB_o = 0;
 
+        case(opcode)
+            6'b101011: begin  // Store word (SW)
+                MemWrite_o = 1;
+            end
+            6'b100011: begin  // Load word (LW)
+                MemRead_o = 1;
+                RegWrite_o = 1;
+            end
+            6'b000000: begin  // R-type (ADD, SUB, etc.)
+                RegWrite_o = 1;
+                ALUSrcA_o = 1;  // Example for R-type operations
+            end
+            default: begin
+                // Handle other cases as necessary
+            end
+        endcase
+    end
+endmodule
 `include "ucsbece154a_defines.vh"
 
 // State Definitions (if needed)
