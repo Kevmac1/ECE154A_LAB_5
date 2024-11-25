@@ -1,160 +1,120 @@
-// ucsbece154a_controller.v
-// All Rights Reserved
-// Copyright (c) 2023 UCSB ECE
-// Distribution Prohibited
-
 module ucsbece154a_controller (
     input               clk, reset,
-    input         [6:0] op_i, 
+    input               zero_i,
+    input         [6:0] opcode_i,
     input         [2:0] funct3_i,
-    input               funct7_i,
-    input 	        zero_i,
-    output wire         PCWrite_o,
-    output reg          MemWrite_o,    
-    output reg          IRWrite_o,
-    output reg          RegWrite_o,
-    output reg    [1:0] ALUSrcA_o,
-    output reg          AdrSrc_o,
-    output reg    [1:0] ResultSrc_o,
-    output reg    [1:0] ALUSrcB_o,
-    output reg    [2:0] ALUControl_o,
-    output reg    [2:0] ImmSrc_o
+    input         [6:0] funct7_i,
+    output reg          PCEn_o,               // Enable PC update
+    output reg          IRWrite_o,            // Control for Instruction Register write
+    output reg [1:0]    ALUSrcA_o,            // ALU source A selection
+    output reg [1:0]    ALUSrcB_o,            // ALU source B selection
+    output reg          RegWrite_o,           // Register write enable
+    output reg          AdrSrc_o,             // Address source selection
+    output reg [1:0]    ResultSrc_o,          // Result source selection
+    output reg [2:0]    ALUControl_o,         // ALU control signal
+    output reg [2:0]    ImmSrc_o              // Immediate source selection
 );
 
 `include "ucsbece154a_defines.vh"
 
-// **********   Extend unit    *********
-always @ * begin
-    case (op_i)
-        instr_lw_op:        ImmSrc_o = 3'b000;       
-        instr_sw_op:        ImmSrc_o = 3'b001; 
-        instr_Rtype_op:     ImmSrc_o = 3'b010;  
-        instr_beq_op:       ImmSrc_o = 3'b010;  
-        instr_ItypeALU_op:  ImmSrc_o = 3'b000; 
-        instr_jal_op:       ImmSrc_o = 3'b011; 
-        instr_lui_op:       ImmSrc_o = 3'b100;  
-        default: 	        ImmSrc_o = 3'bxxx; 
-    endcase
+// State Definitions (if needed)
+localparam STATE_RESET  = 3'b000;
+localparam STATE_FETCH  = 3'b001;
+localparam STATE_DECODE = 3'b010;
+localparam STATE_EXEC   = 3'b011;
+localparam STATE_MEM    = 3'b100;
+localparam STATE_WRITEBACK = 3'b101;
+
+// State register (FSM)
+reg [2:0] state, next_state;
+
+// Always block for state transitions
+always @(posedge clk or posedge reset) begin
+    if (reset)
+        state <= STATE_RESET;
+    else
+        state <= next_state;
 end
 
-// **********  ALU Control  *********
-reg  [1:0] ALUOp;    // these are FFs updated each cycle 
-wire RtypeSub = funct7_i & op_i[5];
-
-always @ * begin
-    case(ALUOp)
-        ALUop_mem:                  ALUControl_o = ALUcontrol_add;
-        ALUop_beq:                  ALUControl_o = ALUcontrol_sub;
-        ALUop_other: 
-            case(funct3_i) 
-                instr_addsub_funct3: begin
-                    if (RtypeSub)    ALUControl_o = ALUcontrol_sub;
-                    else             ALUControl_o = ALUcontrol_add;  
+// Next state and control logic
+always @(*) begin
+    // Default control signals
+    PCEn_o = 0;
+    IRWrite_o = 0;
+    ALUSrcA_o = 2'b00;
+    ALUSrcB_o = 2'b00;
+    RegWrite_o = 0;
+    AdrSrc_o = 0;
+    ResultSrc_o = 2'b00;
+    ALUControl_o = 3'b000;
+    ImmSrc_o = 3'b000;
+    
+    next_state = state;
+    
+    case(state)
+        STATE_RESET: begin
+            next_state = STATE_FETCH;
+        end
+        
+        STATE_FETCH: begin
+            IRWrite_o = 1;  // Write instruction
+            PCEn_o = 1;     // Enable PC update
+            next_state = STATE_DECODE;
+        end
+        
+        STATE_DECODE: begin
+            case(opcode_i)
+                7'b0110011: begin  // R-type (Add, Sub, etc.)
+                    ALUSrcA_o = 2'b00;  // ALU source A (register)
+                    ALUSrcB_o = 2'b00;  // ALU source B (register)
+                    RegWrite_o = 1;     // Enable register write
+                    ALUControl_o = 3'b010; // ALU control (e.g., ADD)
+                    ResultSrc_o = 2'b00; // Use ALU result
+                    next_state = STATE_EXEC;
                 end
-                instr_slt_funct3:     ALUControl_o = ALUcontrol_slt;  
-                instr_or_funct3:      ALUControl_o = ALUcontrol_or;  
-                instr_and_funct3:     ALUControl_o = ALUcontrol_and;  
-                default:              ALUControl_o = 3'bxxx;
+                
+                7'b0000011: begin  // I-type (Load)
+                    ALUSrcA_o = 2'b00;
+                    ALUSrcB_o = 2'b01; // Immediate value
+                    RegWrite_o = 1;
+                    AdrSrc_o = 1;     // Address source (ALU)
+                    ALUControl_o = 3'b010; // ALU control for add
+                    ResultSrc_o = 2'b01; // Load from memory
+                    next_state = STATE_MEM;
+                end
+                
+                7'b1100011: begin  // B-type (Branch)
+                    ALUSrcA_o = 2'b00;
+                    ALUSrcB_o = 2'b01; // Immediate value for branch offset
+                    ALUControl_o = 3'b110; // ALU control for subtraction
+                    next_state = STATE_EXEC;
+                end
+                
+                // More cases for other opcodes (e.g., Store, Jump, etc.)
+                
+                default: begin
+                    next_state = STATE_RESET; // Default reset state
+                end
             endcase
-        default:                      ALUControl_o = 3'bxxx;
+        end
+        
+        STATE_EXEC: begin
+            // Execute ALU operation
+            next_state = STATE_WRITEBACK;
+        end
+        
+        STATE_MEM: begin
+            // Memory read/write operations if needed
+            next_state = STATE_WRITEBACK;
+        end
+        
+        STATE_WRITEBACK: begin
+            // Writeback to register
+            next_state = STATE_FETCH; // Back to fetch
+        end
+        
+        default: next_state = STATE_RESET;
     endcase
-end
-
-// **********  Generating PC Write  *********
-reg Branch, PCUpdate;   // these are FFs updated each cycle 
-
-assign PCWrite_o = Branch & zero_i | PCUpdate; 
-
-// ******************************************
-// *********  Main FSM  *********************
-// ******************************************
-
-// *********  FSM state transistion  ****** 
-reg [3:0] state; //  FSM FFs encoding the state 
-reg [3:0] state_next;
-
-always @ * begin
-    if (reset) begin
-        state_next = state_Fetch;  
-    end else begin             
-        case (state) 
-            state_Fetch:           state_next = state_Decode;  
-            state_Decode: begin
-                case (op_i) 
-                    instr_lw_op:       state_next = state_MemAdr;  
-                    instr_sw_op:       state_next = state_MemAdr;  
-                    instr_Rtype_op:    state_next = state_ExecuteR;  
-                    instr_beq_op:      state_next = state_BEQ;  
-                    instr_ItypeALU_op: state_next = state_ExecuteI;  
-                    instr_lui_op:      state_next = state_LUI;  
-                    instr_jal_op:      state_next = state_JAL;  
-                    default:           state_next = state_Fetch;
-                endcase
-            end
-            state_MemAdr: begin 
-                case (op_i)
-                    instr_lw_op:       state_next = state_MemRead;  
-                    instr_sw_op:       state_next = state_MemWrite;  
-                    default:           state_next = state_Fetch;
-                endcase
-            end
-            state_MemRead:           state_next = state_MemWB;  
-            state_MemWB:             state_next = state_Fetch;  
-            state_MemWrite:          state_next = state_Fetch;  
-            state_ExecuteR:          state_next = state_ALUWB;  
-            state_ALUWB:             state_next = state_Fetch;  
-            state_ExecuteI:          state_next = state_ALUWB;  
-            state_JAL:               state_next = state_Fetch;  
-            state_BEQ:               state_next = state_Fetch;  
-            state_LUI:               state_next = state_Fetch;     
-            default:                 state_next = state_Fetch;
-        endcase
-    end
-end
-
-// *******  Control signal generation  ********
-
-reg [13:0] controls_next;
-wire       PCUpdate_next, Branch_next, MemWrite_next, IRWrite_next, RegWrite_next, AdrSrc_next;
-wire [1:0] ALUSrcA_next, ALUSrcB_next, ResultSrc_next, ALUOp_next;
-
-assign {
-    PCUpdate_next, Branch_next, MemWrite_next, IRWrite_next, RegWrite_next,
-    ALUSrcA_next, ALUSrcB_next, AdrSrc_next, ResultSrc_next, ALUOp_next
-} = controls_next;
-
-always @ * begin
-   case (state_next)
-        state_Fetch:     controls_next = 14'b1_0_1_1_0_00_00_0_00_00;  // Set control signals for Fetch state
-        state_Decode:    controls_next = 14'b0_0_1_1_1_01_01_1_00_00;  // Set for Decode state (example)
-        state_MemAdr:    controls_next = 14'b0_0_0_0_0_00_01_1_00_00;  // For MemAdr state (example)
-        state_MemRead:   controls_next = 14'b0_1_0_1_1_00_01_1_00_00;  // Set for MemRead state
-        state_MemWrite:  controls_next = 14'b0_1_1_1_0_00_01_0_00_00;  // For MemWrite state (example)
-        state_ExecuteR:  controls_next = 14'b0_0_0_1_1_01_00_0_00_00;  // Set for ExecuteR (R-type)
-        state_ALUWB:     controls_next = 14'b1_0_0_1_0_00_00_1_00_00;  // For ALUWB (example)
-        state_ExecuteI:  controls_next = 14'b0_1_1_1_1_01_00_0_00_00;  // For ExecuteI (I-type)
-        state_JAL:       controls_next = 14'b1_0_0_1_1_10_00_0_00_00;  // JAL operation
-        state_BEQ:       controls_next = 14'b0_1_0_1_1_00_01_0_01_00;  // BEQ operation
-        state_LUI:       controls_next = 14'b1_0_1_1_1_00_00_1_00_00;  // LUI operation
-        default:         controls_next = 14'bx_x_x_x_x_xx_xx_x_xx_xx;
-   endcase
-end
-
-
-// *******  Updating control and main FSM FFs  ********
-always @(posedge clk) begin
-    state <= state_next;
-    PCUpdate <= PCUpdate_next;
-    Branch <= Branch_next;
-    MemWrite_o <= MemWrite_next;
-    IRWrite_o <= IRWrite_next;
-    RegWrite_o <= RegWrite_next;
-    ALUSrcA_o <= ALUSrcA_next;
-    ALUSrcB_o <= ALUSrcB_next;
-    AdrSrc_o <= AdrSrc_next;
-    ResultSrc_o <= ResultSrc_next;
-    ALUOp <= ALUOp_next;
 end
 
 endmodule
-
